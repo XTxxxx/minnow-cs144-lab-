@@ -1,6 +1,5 @@
 #include "byte_stream.hh"
 
-#include <cstdint>
 #include <stdexcept>
 
 /*

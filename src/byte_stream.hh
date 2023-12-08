@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-
+#include <cstdint>
 class Reader;
 class Writer;
 
@@ -12,6 +12,16 @@ class ByteStream
 {
 protected:
   uint64_t capacity_;
+  uint64_t available_capacity_;
+  uint64_t bytes_buffered_;
+  uint64_t bytes_pushed_;
+  uint64_t bytes_popped_;
+  uint64_t peek_num_;
+  bool closeBit;
+  bool errorBit;
+  std::string buffer;
+  std::string peek_;
+
   // Please add any additional state to the ByteStream here, and not to the Writer and Reader interfaces.
 
 public:

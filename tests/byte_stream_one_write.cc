@@ -74,8 +74,7 @@ int main()
       test.execute( IsClosed { true } );
       test.execute( BufferEmpty { true } );
       test.execute( IsFinished { true } );
-      test.execute( BytesPopped { 3 } );
-      test.execute( BytesPushed { 3 } );
+      test.execute( BytesPopped { 3 } ); test.execute( BytesPushed { 3 } );
       test.execute( AvailableCapacity { 15 } );
       test.execute( BytesBuffered { 0 } );
     }
@@ -124,7 +123,7 @@ int main()
       test.execute( BytesPushed { 3 } );
       test.execute( AvailableCapacity { 15 } );
       test.execute( BytesBuffered { 0 } );
-    }
+    } 
 
   } catch ( const exception& e ) {
     cerr << "Exception: " << e.what() << endl;
