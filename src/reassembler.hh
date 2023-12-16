@@ -3,10 +3,25 @@
 #include "byte_stream.hh"
 
 #include <string>
+#include <list>
 
 class Reassembler
 {
+private:
+  typedef struct DataNode
+  {
+    uint64_t first_index;
+    uint64_t last_index;
+    std::string data;
+    bool is_last_substring;
+  }dataNode;
+  uint64_t checkpoint_;
+  uint64_t bytesPendging_;
+  std::list<dataNode> dataList; 
+
 public:
+  Reassembler();
+  void insertHelper(uint64_t first_index, std::string data, bool is_last_substring, Writer& output);
   /*
    * Insert a new substring to be reassembled into a ByteStream.
    *   `first_index`: the index of the first byte of the substring
@@ -28,7 +43,7 @@ public:
    * The Reassembler should close the stream after writing the last byte.
    */
   void insert( uint64_t first_index, std::string data, bool is_last_substring, Writer& output );
-
+  void writeIfPossible(Writer& output);
   // How many bytes are stored in the Reassembler itself?
   uint64_t bytes_pending() const;
 };

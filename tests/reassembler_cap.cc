@@ -75,9 +75,7 @@ int main()
 
     {
       ReassemblerTestHarness test { "insert beyond capacity repeated with different data", 2 };
-
-      test.execute( Insert { "b", 1 } );
-      test.execute( BytesPushed( 0 ) );
+test.execute( Insert { "b", 1 } ); test.execute( BytesPushed( 0 ) );
       test.execute( BytesPending( 1 ) );
 
       test.execute( Insert { "bX", 2 } );

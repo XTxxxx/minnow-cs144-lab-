@@ -7,7 +7,16 @@
 
 using namespace std;
 
-ByteStream::ByteStream( uint64_t capacity ) : capacity_( capacity ), available_capacity_( capacity ), bytes_buffered_(0), bytes_pushed_(0), bytes_popped_(0), peek_num_(128), closeBit(false), errorBit(false), buffer(""), peek_("") {}
+ByteStream::ByteStream( uint64_t capacity ) : capacity_( capacity ),
+ available_capacity_( capacity ),
+ bytes_buffered_(0),
+ bytes_pushed_(0),
+ bytes_popped_(0),
+ peek_num_(128),
+ closeBit(false),
+ errorBit(false),
+ buffer(""),
+ peek_("") {}
 
 void Writer::push( string data ) {
   uint64_t len = min(data.length(), available_capacity_);
@@ -15,7 +24,9 @@ void Writer::push( string data ) {
   bytes_buffered_ += len;
   bytes_pushed_ += len;
   buffer += data.substr(0, len);
-  peek_ = buffer.substr(0, min(uint64_t(peek_num_), buffer.length()));
+  if (peek_.length() < peek_num_) {
+    peek_ = buffer.substr(0, min(uint64_t(peek_num_), buffer.length()));
+  }
 }
 
 void Writer::close()
@@ -43,7 +54,7 @@ uint64_t Writer::bytes_pushed() const
 
 string_view Reader::peek() const
 {
-  return peek_; 
+  return peek_;
 }
 
 bool Reader::is_finished() const

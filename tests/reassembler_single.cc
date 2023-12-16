@@ -61,7 +61,7 @@ int main()
 
       test.execute( BytesPushed( 0 ) );
       test.execute( IsFinished { false } );
-    }
+    } 
   } catch ( const exception& e ) {
     cerr << "Exception: " << e.what() << endl;
     return EXIT_FAILURE;
