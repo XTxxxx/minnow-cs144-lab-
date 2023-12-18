@@ -7,9 +7,9 @@
 class TCPReceiver
 {
 private:
-  Wrap32 ISN;
+  std::optional<Wrap32> ISN;
+  std::optional<Wrap32> ACKNO;
   bool started;
-  uint16_t windowSize;
 public:
   TCPReceiver();
   /*
