@@ -28,7 +28,7 @@ TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   windowSize(0),
   isn_( fixed_isn.value_or( Wrap32 { random_device()() } ) ),
   initial_RTO_ms_( initial_RTO_ms ),
-  messageList(queue<TCPSenderMessage>{})
+  messageQueue(queue<TCPSenderMessage>{})
 {}
 
 uint64_t TCPSender::sequence_numbers_in_flight() const
@@ -45,7 +45,11 @@ uint64_t TCPSender::consecutive_retransmissions() const
 
 optional<TCPSenderMessage> TCPSender::maybe_send()
 {
-  return {};
+  if (!messageQueue.empty()) {
+    TCPSenderMessage toSend = messageQueue.front();
+    messageQueue.pop();
+    return toSend;
+  }
 }
 
 //stop when outbound_stream is empty or windowSize is 0
@@ -56,7 +60,7 @@ void TCPSender::push( Reader& outbound_stream )
     string data;
     readHelper(outbound_stream, 1, data);
     TCPSenderMessage newMessage = {isn_, isFirst, data, outbound_stream.bytes_buffered() == 0};
-    messageList.push(newMessage);
+    messageQueue.push(newMessage);
     isn_ = isn_ + newMessage.sequence_length();
     isFirst = false;
     return;
@@ -65,7 +69,7 @@ void TCPSender::push( Reader& outbound_stream )
     string data;
     readHelper(outbound_stream, TCPConfig::MAX_PAYLOAD_SIZE, data);
     TCPSenderMessage newMessage = {isn_, isFirst, data, outbound_stream.bytes_buffered() == 0};
-    messageList.push(newMessage);
+    messageQueue.push(newMessage);
     isn_ = isn_ + newMessage.sequence_length();
     isFirst = false;
   }
