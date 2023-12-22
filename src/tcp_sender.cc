@@ -49,6 +49,8 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
     TCPSenderMessage toSend = messageQueue.front();
     messageQueue.pop();
     return toSend;
+  } else {
+    return nullopt;
   }
 }
 
@@ -77,8 +79,8 @@ void TCPSender::push( Reader& outbound_stream )
 
 TCPSenderMessage TCPSender::send_empty_message() const
 {
-  // Your code here.
-  return {};
+  string data = "";
+  return {isn_, false, data, false};
 }
 
 void TCPSender::receive( const TCPReceiverMessage& msg )
