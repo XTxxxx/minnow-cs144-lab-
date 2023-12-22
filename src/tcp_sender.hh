@@ -6,9 +6,11 @@
 
 class TCPSender
 {
+  bool isFirst;
+  uint16_t windowSize;
   Wrap32 isn_;
   uint64_t initial_RTO_ms_;
-
+  std::queue<TCPSenderMessage> messageList;
 public:
   /* Construct TCP sender with given default Retransmission Timeout and possible ISN */
   TCPSender( uint64_t initial_RTO_ms, std::optional<Wrap32> fixed_isn );
