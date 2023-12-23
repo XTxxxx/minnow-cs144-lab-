@@ -122,6 +122,9 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
 {
   if (msg.ackno.has_value()) {
     uint64_t cur_acked = msg.ackno.value().unwrap(isn_, last_acked_);
+    if (cur_acked > first_index_) {
+      return;
+    }
     if (cur_acked > last_acked_) {
       last_acked_ = cur_acked;
     }
