@@ -22,22 +22,23 @@ void readHelper( Reader& reader, uint64_t len, std::string& out )
   }
 }
 
+
 /* TCPSender constructor (uses a random ISN if none given) */
 TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   :isFirst_(false),
   windowSize_(0),
   isn_( fixed_isn.value_or( Wrap32 { random_device()() } ) ),
+  first_index_(0),
   initial_RTO_ms_( initial_RTO_ms ),
   current_RTO_ms_( initial_RTO_ms ),
-  messageQueue(queue<TCPSenderMessage>{}),
-  outstandingQueue(queue<TCPSenderMessage>{}),
+  messageQueue(priority_queue<messageUnit, vector<messageUnit>, greater<messageUnit>>{}),
+  outstandingQueue(priority_queue<messageUnit, vector<messageUnit>, greater<messageUnit>>{}),
   retrans_timer_()
 {}
 
 uint64_t TCPSender::sequence_numbers_in_flight() const
 {
-  // Your code here.
-  return 0;
+  return outstandingQueue.size();
 }
 
 uint64_t TCPSender::consecutive_retransmissions() const
@@ -49,14 +50,14 @@ uint64_t TCPSender::consecutive_retransmissions() const
 optional<TCPSenderMessage> TCPSender::maybe_send()
 {
   if (!messageQueue.empty()) {
-    TCPSenderMessage toSend = messageQueue.front();
+    pair<uint64_t, TCPSenderMessage> toSend = messageQueue.top();
     messageQueue.pop();
     outstandingQueue.push(toSend);
     if (!retrans_timer_.is_on()) {
       retrans_timer_.start();
       retrans_timer_.setRTO(current_RTO_ms_);
     }
-    return toSend;
+    return toSend.second;
   } else {
     return nullopt;
   }
@@ -69,18 +70,18 @@ void TCPSender::push( Reader& outbound_stream )
   if (windowSize_ == 0 && outbound_stream.bytes_buffered() > 0) { //assume windowSize is 1
     string data;
     readHelper(outbound_stream, 1, data);
-    TCPSenderMessage newMessage = {isn_, isFirst_, data, outbound_stream.bytes_buffered() == 0};
-    messageQueue.push(newMessage);
-    isn_ = isn_ + newMessage.sequence_length();
+    TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), isFirst_, data, outbound_stream.bytes_buffered() == 0};
+    messageQueue.push({first_index_, newMessage});
+    first_index_ += newMessage.sequence_length();
     isFirst_ = false;
     return;
   }
   while (windowSize_ > 0 && outbound_stream.bytes_buffered() > 0) {
     string data;
     readHelper(outbound_stream, TCPConfig::MAX_PAYLOAD_SIZE, data);
-    TCPSenderMessage newMessage = {isn_, isFirst_, data, outbound_stream.bytes_buffered() == 0};
-    messageQueue.push(newMessage);
-    isn_ = isn_ + newMessage.sequence_length();
+    TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), isFirst_, data, outbound_stream.bytes_buffered() == 0};
+    messageQueue.push({first_index_, newMessage});
+    first_index_ += newMessage.sequence_length();
     isFirst_ = false;
   }
 }
@@ -107,7 +108,7 @@ void TCPSender::tick( const size_t ms_since_last_tick )
 
 void TCPSender::time_expire() {
   
-  TCPSenderMessage toSend = outstandingQueue.front();
+  pair<uint64_t, TCPSenderMessage> toSend = outstandingQueue.top();
   //don't pop 
   
 

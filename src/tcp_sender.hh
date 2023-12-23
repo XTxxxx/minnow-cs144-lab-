@@ -22,16 +22,18 @@ class RetransTimer
       bool is_expired();
   };
 
+using messageUnit = std::pair<uint64_t, TCPSenderMessage>;
 
 class TCPSender
 {
   bool isFirst_;
   uint16_t windowSize_;
   Wrap32 isn_;
+  uint64_t first_index_;
   uint64_t initial_RTO_ms_;
   uint64_t current_RTO_ms_;
-  std::queue<TCPSenderMessage> messageQueue;
-  std::queue<TCPSenderMessage> outstandingQueue;
+  std::priority_queue<messageUnit, std::vector<messageUnit>, std::greater<messageUnit>> messageQueue;
+  std::priority_queue<messageUnit, std::vector<messageUnit>, std::greater<messageUnit>> outstandingQueue;
   RetransTimer retrans_timer_;
   void time_expire();
 public:
