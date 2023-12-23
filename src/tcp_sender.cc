@@ -57,6 +57,7 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
     outstandingQueue.push(toSend);
     if (!retrans_timer_.is_on()) {
       retrans_timer_.start();
+      retrans_timer_.resetRTO(initial_RTO_ms_);
     }
     return toSend.second;
   } else {
@@ -153,7 +154,7 @@ void TCPSender::time_expire() {
   pair<uint64_t, TCPSenderMessage> toSend = outstandingQueue.top();
   outstandingQueue.pop();
   messageQueue.push(toSend);
-  if (windowSize_ > 0) {
+  if (windowSize_ + sequence_numbers_in_flight_ > 0) {
     consecutive_retransmissions_++;
   }
   retrans_timer_.start();
