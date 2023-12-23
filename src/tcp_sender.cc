@@ -5,9 +5,8 @@
 
 using namespace std;
 
-
 void readHelper( Reader& reader, uint64_t len, std::string& out )
-{ //copy from byte_stream_helpers.cc
+{ //a copy from byte_stream_helpers.cc
   out.clear();
 
   while ( reader.bytes_buffered() and out.size() < len ) {
@@ -31,19 +30,20 @@ TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   initial_RTO_ms_( initial_RTO_ms ),
   current_RTO_ms_( initial_RTO_ms ),
   messageQueue(queue<TCPSenderMessage>{}),
+  outstandingQueue(queue<TCPSenderMessage>{}),
   retrans_timer_()
 {}
 
 uint64_t TCPSender::sequence_numbers_in_flight() const
 {
   // Your code here.
-  return {};
+  return 0;
 }
 
 uint64_t TCPSender::consecutive_retransmissions() const
 {
   // Your code here.
-  return {};
+  return 0;
 }
 
 optional<TCPSenderMessage> TCPSender::maybe_send()
@@ -51,6 +51,11 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
   if (!messageQueue.empty()) {
     TCPSenderMessage toSend = messageQueue.front();
     messageQueue.pop();
+    outstandingQueue.push(toSend);
+    if (!retrans_timer_.is_on()) {
+      retrans_timer_.start();
+      retrans_timer_.setRTO(current_RTO_ms_);
+    }
     return toSend;
   } else {
     return nullopt;
@@ -94,16 +99,28 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
 
 void TCPSender::tick( const size_t ms_since_last_tick )
 {
-  // Your code here.
-  (void)ms_since_last_tick;
+  retrans_timer_.tick(ms_since_last_tick);
+  if (retrans_timer_.is_expired()) {
+      time_expire();
+  }
 }
 
-RetransTimer::RetransTimer() : is_on( false ), time_cnt( 0 ), RTO_ms_( 0 ) {}
+void TCPSender::time_expire() {
+  
+  TCPSenderMessage toSend = outstandingQueue.front();
+  //don't pop 
+  
+
+}
+
+//below are definitions of RetransTimer
+
+RetransTimer::RetransTimer() : is_on_( false ), is_expired_(false), time_cnt_( 0 ), RTO_ms_( 0 ) {}
 
 void RetransTimer::tick(uint64_t ms_since_last_tick) {
-  time_cnt += ms_since_last_tick;
-  if (time_cnt >= RTO_ms_) {
-    expire();
+  time_cnt_ += ms_since_last_tick;
+  if (time_cnt_ >= RTO_ms_) {
+    is_expired_ = true;
   }
 }
 
@@ -111,6 +128,21 @@ void RetransTimer::setRTO(uint64_t value) {
   RTO_ms_ = value;
 }
 
-void RetransTimer::expire() {
-  
+void RetransTimer::start() {
+  if (is_on_ == false) {
+    is_on_ = true;
+    time_cnt_ = 0;
+  }
+}
+
+void RetransTimer::stop() {
+  is_on_ = false;
+}
+
+bool RetransTimer::is_expired() {
+  return is_expired_;
+}
+
+bool RetransTimer::is_on() {
+  return is_on_;
 }

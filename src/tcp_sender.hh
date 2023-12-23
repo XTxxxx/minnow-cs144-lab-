@@ -7,15 +7,19 @@
 
 class RetransTimer
   {
-    bool is_on;
-    uint64_t time_cnt;
+    bool is_on_;
+    bool is_expired_;
+    uint64_t time_cnt_;
     uint64_t RTO_ms_;
     public:
       friend class TCPSender;
       RetransTimer(); 
       void tick(uint64_t ms_since_last_tick);
       void setRTO(uint64_t value);
-      void expire();
+      void start();
+      void stop();
+      bool is_on();
+      bool is_expired();
   };
 
 
@@ -27,7 +31,9 @@ class TCPSender
   uint64_t initial_RTO_ms_;
   uint64_t current_RTO_ms_;
   std::queue<TCPSenderMessage> messageQueue;
+  std::queue<TCPSenderMessage> outstandingQueue;
   RetransTimer retrans_timer_;
+  void time_expire();
 public:
   friend class RetransTimer;
   /* Construct TCP sender with given default Retransmission Timeout and possible ISN */
