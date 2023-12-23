@@ -69,7 +69,7 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
 //special case when windowSize is 0 at first
 void TCPSender::push( Reader& outbound_stream )
 {
-  if (windowSize_ == 0) { //assume windowSize is 1
+  if (windowSize_ + sequence_numbers_in_flight_ == 0) { //assume windowSize is 1
     string data = "";
     if (first_index_ == 0) {
       TCPSenderMessage newMessage = {isn_, true, data, false};
@@ -77,10 +77,10 @@ void TCPSender::push( Reader& outbound_stream )
       sequence_numbers_in_flight_ += newMessage.sequence_length();
       first_index_ += 1;
     } else if (outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()){
-      TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
+      /*TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
       messageQueue.push({first_index_, newMessage});
       sequence_numbers_in_flight_ += newMessage.sequence_length();
-      first_index_ += 1;
+      first_index_ += 1;*/
     } else if (outbound_stream.bytes_buffered()) {
       readHelper(outbound_stream, 1, data);
       TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, false};
@@ -89,7 +89,10 @@ void TCPSender::push( Reader& outbound_stream )
       first_index_ += newMessage.sequence_length();
     }
   }
-  while (windowSize_ > 0 && outbound_stream.bytes_buffered()) {
+  while (windowSize_ > 0) {
+    if (outbound_stream.bytes_buffered() == 0 && first_index_ != 0 && !outbound_stream.is_finished()) {
+      break;
+    }
     int length = min(windowSize_, (uint16_t)TCPConfig::MAX_PAYLOAD_SIZE);
     string data;
     if (first_index_ == 0) {
@@ -97,18 +100,16 @@ void TCPSender::push( Reader& outbound_stream )
     }
     readHelper(outbound_stream, length, data);
     TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), first_index_ == 0, data, false};
+    windowSize_ -= newMessage.sequence_length();
+    if (windowSize_ > 0 && outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()){
+      newMessage.FIN = true;
+      windowSize_ -= 1;
+    }
     messageQueue.push({first_index_, newMessage});
     sequence_numbers_in_flight_ += newMessage.sequence_length();
-    windowSize_ -= newMessage.sequence_length();
     first_index_ += newMessage.sequence_length();
   }
-  if (windowSize_ > 0 && outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()) {
-    string data = "";
-    TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
-    sequence_numbers_in_flight_ += newMessage.sequence_length();
-    first_index_ += 1;
-    windowSize_ -= 1;
-  }
+  
 }
 
 TCPSenderMessage TCPSender::send_empty_message() const
@@ -119,7 +120,6 @@ TCPSenderMessage TCPSender::send_empty_message() const
 
 void TCPSender::receive( const TCPReceiverMessage& msg )
 {
-  windowSize_ = msg.window_size - sequence_numbers_in_flight_;
   if (msg.ackno.has_value()) {
     uint64_t cur_acked = msg.ackno.value().unwrap(isn_, last_acked_);
     if (cur_acked > last_acked_) {
@@ -130,7 +130,6 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
   while (!outstandingQueue.empty() && outstandingQueue.top().first + outstandingQueue.top().second.sequence_length() - 1 < last_acked_) {
     flag = true;
     sequence_numbers_in_flight_ -= outstandingQueue.top().second.sequence_length();
-    windowSize_ += outstandingQueue.top().second.sequence_length();
     outstandingQueue.pop();
   }
   if (flag) {
@@ -140,6 +139,7 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
     }
     consecutive_retransmissions_ = 0;
   }
+  windowSize_ = msg.window_size - sequence_numbers_in_flight_;
 }
 
 void TCPSender::tick( const size_t ms_since_last_tick )
