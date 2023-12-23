@@ -15,7 +15,8 @@ class RetransTimer
       friend class TCPSender;
       RetransTimer(); 
       void tick(uint64_t ms_since_last_tick);
-      void setRTO(uint64_t value);
+      void doubleRTO();
+      void resetRTO(uint64_t);
       void start();
       void stop();
       bool is_on();
@@ -26,12 +27,13 @@ using messageUnit = std::pair<uint64_t, TCPSenderMessage>;
 
 class TCPSender
 {
-  bool isFirst_;
-  uint16_t windowSize_;
+  int16_t windowSize_;
   Wrap32 isn_;
   uint64_t first_index_;
+  uint64_t last_acked_;
   uint64_t initial_RTO_ms_;
-  uint64_t current_RTO_ms_;
+  uint64_t consecutive_retransmissions_;
+  uint64_t sequence_numbers_in_flight_;
   std::priority_queue<messageUnit, std::vector<messageUnit>, std::greater<messageUnit>> messageQueue;
   std::priority_queue<messageUnit, std::vector<messageUnit>, std::greater<messageUnit>> outstandingQueue;
   RetransTimer retrans_timer_;
