@@ -27,6 +27,7 @@ void readHelper( Reader& reader, uint64_t len, std::string& out )
 /* TCPSender constructor (uses a random ISN if none given) */
 TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   :
+  FIN_acked_(false),
   windowSize_(0),
   isn_( fixed_isn.value_or( Wrap32 { random_device()() } ) ),
   first_index_(0),
@@ -69,19 +70,22 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
 //special case when windowSize is 0 at first
 void TCPSender::push( Reader& outbound_stream )
 {
-  if (windowSize_ + sequence_numbers_in_flight_ == 0) { //assume windowSize is 1
-    string data = "";
+  if (windowSize_ + sequence_numbers_in_flight_ == 0 && !FIN_acked_) { //assume windowSize is 1
     if (first_index_ == 0) {
+      string data = "";
       TCPSenderMessage newMessage = {isn_, true, data, false};
       messageQueue.push({first_index_, newMessage});
       sequence_numbers_in_flight_ += newMessage.sequence_length();
       first_index_ += 1;
     } else if (outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()){
-      /*TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
+      string data = "";
+      TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
       messageQueue.push({first_index_, newMessage});
       sequence_numbers_in_flight_ += newMessage.sequence_length();
-      first_index_ += 1;*/
+      first_index_ += 1;
+      FIN_acked_ = true;
     } else if (outbound_stream.bytes_buffered()) {
+      string data = "";
       readHelper(outbound_stream, 1, data);
       TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, false};
       messageQueue.push({first_index_, newMessage});
@@ -89,8 +93,9 @@ void TCPSender::push( Reader& outbound_stream )
       first_index_ += newMessage.sequence_length();
     }
   }
+  bool signal_need_handled = (!FIN_acked_ && outbound_stream.is_finished()) || first_index_ == 0;
   while (windowSize_ > 0) {
-    if (outbound_stream.bytes_buffered() == 0 && first_index_ != 0 && !outbound_stream.is_finished()) {
+    if (!signal_need_handled && outbound_stream.bytes_buffered() == 0) { //SYN handled above
       break;
     }
     int length = min(windowSize_, (uint16_t)TCPConfig::MAX_PAYLOAD_SIZE);
@@ -102,6 +107,8 @@ void TCPSender::push( Reader& outbound_stream )
     TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), first_index_ == 0, data, false};
     windowSize_ -= newMessage.sequence_length();
     if (windowSize_ > 0 && outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()){
+      signal_need_handled = false;
+      FIN_acked_ = true;
       newMessage.FIN = true;
       windowSize_ -= 1;
     }

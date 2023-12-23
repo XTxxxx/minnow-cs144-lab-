@@ -27,6 +27,7 @@ using messageUnit = std::pair<uint64_t, TCPSenderMessage>;
 
 class TCPSender
 {
+  bool FIN_acked_;
   uint16_t windowSize_;
   Wrap32 isn_;
   uint64_t first_index_;
