@@ -13,8 +13,8 @@ class RetransTimer
     uint64_t RTO_ms_;
     public:
       friend class TCPSender;
-      RetransTimer(); 
-      void tick(uint64_t ms_since_last_tick);
+      RetransTimer(uint64_t); 
+      void tick(uint64_t);
       void doubleRTO();
       void resetRTO(uint64_t);
       void start();
@@ -28,6 +28,7 @@ using messageUnit = std::pair<uint64_t, TCPSenderMessage>;
 class TCPSender
 {
   bool FIN_acked_;
+  bool win_empty_;
   uint16_t windowSize_;
   Wrap32 isn_;
   uint64_t first_index_;

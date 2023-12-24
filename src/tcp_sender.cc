@@ -28,7 +28,8 @@ void readHelper( Reader& reader, uint64_t len, std::string& out )
 TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   :
   FIN_acked_(false),
-  windowSize_(0),
+  win_empty_(false),
+  windowSize_(1),
   isn_( fixed_isn.value_or( Wrap32 { random_device()() } ) ),
   first_index_(0),
   last_acked_(0),
@@ -37,7 +38,7 @@ TCPSender::TCPSender( uint64_t initial_RTO_ms, optional<Wrap32> fixed_isn )
   sequence_numbers_in_flight_(0),
   messageQueue(priority_queue<messageUnit, vector<messageUnit>, greater<messageUnit>>{}),
   outstandingQueue(priority_queue<messageUnit, vector<messageUnit>, greater<messageUnit>>{}),
-  retrans_timer_()
+  retrans_timer_(initial_RTO_ms_)
 {}
 
 uint64_t TCPSender::sequence_numbers_in_flight() const
@@ -58,7 +59,7 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
     outstandingQueue.push(toSend);
     if (!retrans_timer_.is_on()) {
       retrans_timer_.start();
-      retrans_timer_.resetRTO(initial_RTO_ms_);
+      // retrans_timer_.resetRTO(initial_RTO_ms_);
     }
     return toSend.second;
   } else {
@@ -70,7 +71,7 @@ optional<TCPSenderMessage> TCPSender::maybe_send()
 //special case when windowSize is 0 at first
 void TCPSender::push( Reader& outbound_stream )
 {
-  if (windowSize_ + sequence_numbers_in_flight_ == 0 && !FIN_acked_) { //assume windowSize is 1
+  if (win_empty_ && sequence_numbers_in_flight_ == 0) { //assume windowSize is 1
     if (first_index_ == 0) {
       string data = "";
       TCPSenderMessage newMessage = {isn_, true, data, false};
@@ -78,8 +79,7 @@ void TCPSender::push( Reader& outbound_stream )
       sequence_numbers_in_flight_ += newMessage.sequence_length();
       first_index_ += 1;
     } else if (outbound_stream.bytes_buffered() == 0 && outbound_stream.is_finished()){
-      string data = "";
-      TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, data, true};
+      TCPSenderMessage newMessage = {Wrap32::wrap(first_index_, isn_), false, string{""}, true};
       messageQueue.push({first_index_, newMessage});
       sequence_numbers_in_flight_ += newMessage.sequence_length();
       first_index_ += 1;
@@ -121,12 +121,16 @@ void TCPSender::push( Reader& outbound_stream )
 
 TCPSenderMessage TCPSender::send_empty_message() const
 {
-  string data = "";
-  return {Wrap32::wrap(first_index_, isn_), false, data, false};
+  return {Wrap32::wrap(first_index_, isn_), false, string{""}, false};
 }
 
 void TCPSender::receive( const TCPReceiverMessage& msg )
 {
+  if (msg.window_size == 0) {
+    win_empty_ = true;
+  } else {
+    win_empty_ = false;
+  }
   if (msg.ackno.has_value()) {
     uint64_t cur_acked = msg.ackno.value().unwrap(isn_, last_acked_);
     if (cur_acked > first_index_) {
@@ -149,7 +153,14 @@ void TCPSender::receive( const TCPReceiverMessage& msg )
     }
     consecutive_retransmissions_ = 0;
   }
-  windowSize_ = msg.window_size - sequence_numbers_in_flight_;
+  if (outstandingQueue.empty()) {
+    retrans_timer_.stop();
+  }
+  if (msg.window_size > sequence_numbers_in_flight_) {
+    windowSize_ = msg.window_size - sequence_numbers_in_flight_;
+  } else {
+    windowSize_ = 0;
+  }
 }
 
 void TCPSender::tick( const size_t ms_since_last_tick )
@@ -164,21 +175,25 @@ void TCPSender::time_expire() {
   pair<uint64_t, TCPSenderMessage> toSend = outstandingQueue.top();
   outstandingQueue.pop();
   messageQueue.push(toSend);
-  if (windowSize_ + sequence_numbers_in_flight_ > 0) {
+  if (!win_empty_ && sequence_numbers_in_flight_ != 0) {
     consecutive_retransmissions_++;
+    retrans_timer_.doubleRTO();
   }
   retrans_timer_.start();
-  retrans_timer_.doubleRTO();
 }
 
 //below are definitions of RetransTimer
 
-RetransTimer::RetransTimer() : is_on_( false ), is_expired_(false), time_cnt_( 0 ), RTO_ms_( 0 ) {}
+RetransTimer::RetransTimer(uint64_t initial_RTO_ms_) : is_on_( false ), is_expired_(false), time_cnt_( 0 ), RTO_ms_( initial_RTO_ms_ ) {}
 
 void RetransTimer::tick(uint64_t ms_since_last_tick) {
+  if (!is_on_) {
+    return;
+  }
   time_cnt_ += ms_since_last_tick;
   if (time_cnt_ >= RTO_ms_) {
     is_expired_ = true;
+    time_cnt_ = 0;
   }
 }
 
